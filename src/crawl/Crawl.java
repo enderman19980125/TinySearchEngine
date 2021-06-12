@@ -1,5 +1,6 @@
 package crawl;
 
+import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.*;
@@ -9,11 +10,6 @@ import java.util.concurrent.ExecutorService;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.BufferedWriter;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.DirectoryStream;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -62,16 +58,16 @@ public class Crawl implements Runnable {
      * @throws IOException IOException
      */
     static private void initializeLogger() throws IOException {
-        logger = Logger.getLogger("scrapy");
+        logger = Logger.getLogger("crawl");
 
         logger.setLevel(Level.ALL);
         logger.setUseParentHandlers(false);
 
         Handler consoleHandler = new ConsoleHandler();
-        consoleHandler.setLevel(Level.FINE);
+        consoleHandler.setLevel(Level.INFO);
         logger.addHandler(consoleHandler);
 
-        String filename = rootPath.resolve("scrapy.log").toString();
+        String filename = rootPath.resolve("crawl.log").toString();
         Handler fileHandler = new FileHandler(filename, true);
         fileHandler.setLevel(Level.INFO);
         logger.addHandler(fileHandler);
@@ -126,53 +122,61 @@ public class Crawl implements Runnable {
     /**
      * Add URL to "${rootPath}/.urls", then add URL to thread pool.
      *
-     * @param url URL to be added
-     * @return true if exists or success, false otherwise
+     * @param currentURL current URL
+     * @param nextURL    URL to be added
      */
-    static protected boolean addURL(String url) {
-        String uuid = UUID.nameUUIDFromBytes(url.getBytes()).toString();
+    static protected void addURL(String currentURL, String nextURL) {
+        String uuid = UUID.nameUUIDFromBytes(nextURL.getBytes()).toString();
         Path urlPath = urlsPath.resolve(uuid);
-
-        if (Files.exists(urlPath))
-            return true;
 
         try {
             Files.createFile(urlPath);
             FileWriter fileWriter = new FileWriter(urlPath.toString());
             BufferedWriter writer = new BufferedWriter(fileWriter);
-            writer.write(url);
+            writer.write(nextURL);
             writer.close();
+        } catch (FileAlreadyExistsException e) {
+            // e.printStackTrace();
+            String msg = String.format("%s [addURL] %s already existed.", currentURL, nextURL);
+            logger.fine(msg);
+            return;
         } catch (IOException e) {
-            e.printStackTrace();
-            return false;
+            // e.printStackTrace();
+            String msg = String.format("%s [addURL] %s failed to add!", currentURL, nextURL);
+            logger.severe(msg);
+            return;
         }
 
-        fixedThreadPool.execute(new Crawl(url));
-
-        return true;
+        fixedThreadPool.execute(new Crawl(nextURL));
+        String msg = String.format("%s [addURL] %s success.", currentURL, nextURL);
+        logger.fine(msg);
     }
 
     /**
      * Remove URL from "${rootPath}/.urls".
      *
      * @param url URL to be removed
-     * @return true if non-exists or success, false otherwise
      */
-    static protected boolean removeURL(String url) {
+    static protected void removeURL(String url) {
         String uuid = UUID.nameUUIDFromBytes(url.getBytes()).toString();
         Path urlPath = urlsPath.resolve(uuid);
 
-        if (Files.notExists(urlPath))
-            return true;
-
         try {
             Files.delete(urlPath);
+        } catch (NoSuchFileException e) {
+            // e.printStackTrace();
+            String msg = String.format("%s [removeURL] not exist.", url);
+            logger.fine(msg);
+            return;
         } catch (IOException e) {
-            e.printStackTrace();
-            return false;
+            // e.printStackTrace();
+            String msg = String.format("%s [removeURL] failed to remove!", url);
+            logger.severe(msg);
+            return;
         }
 
-        return true;
+        String msg = String.format("%s [removeURL] success.", url);
+        logger.fine(msg);
     }
 
     /**
@@ -186,7 +190,7 @@ public class Crawl implements Runnable {
         try {
             document = Jsoup.connect(url).get();
         } catch (IOException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
         }
         return document;
     }
@@ -285,7 +289,7 @@ public class Crawl implements Runnable {
                 Files.delete(contentPath);
             Files.createFile(contentPath);
         } catch (IOException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             return false;
         }
 
@@ -295,7 +299,7 @@ public class Crawl implements Runnable {
             writer.write(content);
             writer.close();
         } catch (IOException e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             return false;
         }
 
@@ -326,8 +330,9 @@ public class Crawl implements Runnable {
 
         Document document = request(url);
         if (document == null) {
+            removeURL(url);
             msg = String.format("%s [Request] failed to request!", url);
-            logger.severe(msg);
+            logger.fine(msg);
             return;
         }
 
@@ -336,7 +341,7 @@ public class Crawl implements Runnable {
         Path savingPath = generateSavingPath(url);
 
         msg = String.format("%s\n[title] %s\n[body] %s\n[savingPath] %s", url, title, body, savingPath);
-        logger.finest(msg);
+        logger.fine(msg);
 
         if (!save(savingPath, url, title, body)) {
             msg = String.format("%s failed to save!", url);
@@ -346,26 +351,11 @@ public class Crawl implements Runnable {
 
         List<String> urlsList = filterURLs(parseURLs(document));
         for (String nextURL : urlsList)
-            if (!isExistURL(nextURL)) {
-                if (addURL(nextURL)) {
-                    msg = String.format("%s [addURL] %s success.", url, nextURL);
-                    logger.finest(msg);
-                } else {
-                    msg = String.format("%s [addURL] %s failed to add!", url, nextURL);
-                    logger.severe(msg);
-                    return;
-                }
+            if (!isExistURL(nextURL) && !url.equals(nextURL)) {
+                addURL(url, nextURL);
             }
 
-        if (removeURL(url)) {
-            msg = String.format("%s [removeURL] success.", url);
-            logger.finest(msg);
-        } else {
-            msg = String.format("%s [removeURL] failed to remove!", url);
-            logger.severe(msg);
-            return;
-        }
-
+        removeURL(url);
         msg = String.format("%s success.", url);
         logger.info(msg);
     }

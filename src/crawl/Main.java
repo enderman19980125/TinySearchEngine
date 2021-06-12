@@ -57,7 +57,7 @@ public class Main {
         }
 
         Crawl.initialize(numThreads, rootPath);
-        if (isFirstTime) Crawl.addURL("https://news.njnu.edu.cn/");
+        if (isFirstTime) Crawl.addURL("", "https://news.njnu.edu.cn/");
         Crawl.start();
     }
 }
