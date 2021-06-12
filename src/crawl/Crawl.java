@@ -237,7 +237,7 @@ public class Crawl implements Runnable {
     static protected List<String> filterURLs(List<String> urlsList) {
         List<String> filteredURLsList = new LinkedList<>();
         for (String url : urlsList) {
-            if (url.matches("^https?://[^/]*njnu.edu.cn.*$"))
+            if (url.matches("^https?://[^/]*news.njnu.edu.cn.*$"))
                 filteredURLsList.add(url);
         }
         return filteredURLsList;
