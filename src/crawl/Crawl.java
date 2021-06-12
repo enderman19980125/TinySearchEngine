@@ -20,6 +20,7 @@ public class Crawl implements Runnable {
     static private Path rootPath, urlsPath;
     static private Logger logger;
     static private ExecutorService fixedThreadPool;
+    static private String regexURL;
 
     private final String url;
 
@@ -34,6 +35,15 @@ public class Crawl implements Runnable {
         initializePath(rootPath);
         initializeLogger();
         initializeThreadPool(numThreads);
+    }
+
+    /**
+     * Set the regex for filtering URLs, e.g. "^https?://[^/]*njnu.edu.cn.*$".
+     *
+     * @param regex a regex string
+     */
+    static public void setFilterPattern(String regex) {
+        regexURL = regex;
     }
 
     /**
@@ -89,9 +99,9 @@ public class Crawl implements Runnable {
      * @throws InterruptedException InterruptedException
      */
     static public void start() throws IOException, InterruptedException {
-        List<String> urlsLisk = loadURLs();
+        List<String> urlsList = loadURLs();
 
-        for (String url : urlsLisk) {
+        for (String url : urlsList) {
             fixedThreadPool.execute(new Crawl(url));
         }
 
@@ -241,7 +251,7 @@ public class Crawl implements Runnable {
     static protected List<String> filterURLs(List<String> urlsList) {
         List<String> filteredURLsList = new LinkedList<>();
         for (String url : urlsList) {
-            if (url.matches("^https?://[^/]*news.njnu.edu.cn.*$"))
+            if (url.matches(regexURL))
                 filteredURLsList.add(url);
         }
         return filteredURLsList;

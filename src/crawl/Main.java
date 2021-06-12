@@ -38,17 +38,22 @@ public class Main {
     static public void main(String[] args) throws IOException, InterruptedException {
         // demo();
 
-        boolean isFirstTime = false;
         int numThreads = 16;
+        String firstURL = null;
+        String regexURL = "";
         String rootPath = null;
 
         for (int i = 0; i < args.length; ++i) {
-            if (args[i].equals("--first")) {
-                isFirstTime = true;
-                continue;
-            }
             if (args[i].equals("--num")) {
                 numThreads = Integer.parseInt(args[++i]);
+                continue;
+            }
+            if (args[i].equals("--first")) {
+                firstURL = args[++i];
+                continue;
+            }
+            if (args[i].equals("--domain")) {
+                regexURL = String.format("^https?://[^/]*%s.*$", args[++i]);
                 continue;
             }
             if (args[i].equals("--path")) {
@@ -57,7 +62,8 @@ public class Main {
         }
 
         Crawl.initialize(numThreads, rootPath);
-        if (isFirstTime) Crawl.addURL("", "https://news.njnu.edu.cn/");
+        Crawl.setFilterPattern(regexURL);
+        if (firstURL != null) Crawl.addURL("", firstURL);
         Crawl.start();
     }
 }
