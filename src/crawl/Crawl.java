@@ -286,11 +286,22 @@ public class Crawl implements Runnable {
      * @param url        URL
      * @param title      title of current webpage
      * @param body       body of current webpage
+     * @param nextURLs   a list of URLs from current URL
      * @return true if success, false otherwise
      */
-    static private boolean save(Path savingPath, String url, String title, String body) {
+    static private boolean save(Path savingPath, String url, String title, String body, List<String> nextURLs) {
+        StringBuilder contentBuilder = new StringBuilder();
+        contentBuilder.append("[URL]").append("\n");
+        contentBuilder.append(url).append("\n");
+        contentBuilder.append("[nextURLs]").append("\n");
+        for (String nextURL : nextURLs) contentBuilder.append(nextURL).append(" ");
+        contentBuilder.append("\n");
+        contentBuilder.append("[title]").append("\n");
+        contentBuilder.append(title).append("\n");
+        contentBuilder.append("[body]").append("\n");
+        contentBuilder.append(body).append("\n");
+        String content = contentBuilder.toString();
         Path contentPath = savingPath.resolve("content");
-        String content = String.format("%s\n%s\n%s\n", url, title, body);
 
         try {
             if (!Files.exists(savingPath))
@@ -348,18 +359,18 @@ public class Crawl implements Runnable {
 
         String title = parseTitle(document);
         String body = parseBody(document);
+        List<String> urlsList = filterURLs(parseURLs(document));
         Path savingPath = generateSavingPath(url);
 
         msg = String.format("%s\n[title] %s\n[body] %s\n[savingPath] %s", url, title, body, savingPath);
         logger.fine(msg);
 
-        if (!save(savingPath, url, title, body)) {
+        if (!save(savingPath, url, title, body, urlsList)) {
             msg = String.format("%s failed to save!", url);
             logger.severe(msg);
             return;
         }
 
-        List<String> urlsList = filterURLs(parseURLs(document));
         for (String nextURL : urlsList)
             if (!isExistURL(nextURL) && !url.equals(nextURL)) {
                 addURL(url, nextURL);
