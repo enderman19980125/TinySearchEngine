@@ -105,7 +105,7 @@ public class Crawl implements Runnable {
             fixedThreadPool.execute(new Crawl(url));
         }
 
-        while (!fixedThreadPool.isTerminated()) {
+        while (!loadURLs().isEmpty()) {
             TimeUnit.SECONDS.sleep(10);
         }
 
