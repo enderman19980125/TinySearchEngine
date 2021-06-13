@@ -20,7 +20,8 @@ public class Crawl implements Runnable {
     static private Path rootPath, urlsPath;
     static private Logger logger;
     static private ExecutorService fixedThreadPool;
-    static private String regexURL;
+    static private String regexURL = "";
+    static private int secondsSinceLastAddURL = 0;
 
     private final String url;
 
@@ -74,7 +75,7 @@ public class Crawl implements Runnable {
         logger.setUseParentHandlers(false);
 
         Handler consoleHandler = new ConsoleHandler();
-        consoleHandler.setLevel(Level.INFO);
+        consoleHandler.setLevel(Level.FINE);
         logger.addHandler(consoleHandler);
 
         String filename = rootPath.resolve("crawl.log").toString();
@@ -105,11 +106,23 @@ public class Crawl implements Runnable {
             fixedThreadPool.execute(new Crawl(url));
         }
 
-        while (!loadURLs().isEmpty()) {
+        while (secondsSinceLastAddURL <= 60) {
             TimeUnit.SECONDS.sleep(10);
+            secondsSinceLastAddURL += 10;
+            if (secondsSinceLastAddURL >= 30) {
+                String msg = String.format("%s seconds have passed since last adding URL.", secondsSinceLastAddURL);
+                logger.finest(msg);
+            }
         }
 
         fixedThreadPool.shutdown();
+        logger.info("Thread pool has shutdown.");
+
+        while (!fixedThreadPool.isTerminated()) {
+            TimeUnit.SECONDS.sleep(1);
+        }
+
+        logger.info("Thread pool has terminated.");
     }
 
     /**
@@ -148,7 +161,7 @@ public class Crawl implements Runnable {
         } catch (FileAlreadyExistsException e) {
             // e.printStackTrace();
             String msg = String.format("%s [addURL] %s already existed.", currentURL, nextURL);
-            logger.fine(msg);
+            logger.finest(msg);
             return;
         } catch (IOException e) {
             // e.printStackTrace();
@@ -158,8 +171,9 @@ public class Crawl implements Runnable {
         }
 
         fixedThreadPool.execute(new Crawl(nextURL));
+        secondsSinceLastAddURL = 0;
         String msg = String.format("%s [addURL] %s success.", currentURL, nextURL);
-        logger.fine(msg);
+        logger.finest(msg);
     }
 
     /**
@@ -176,7 +190,7 @@ public class Crawl implements Runnable {
         } catch (NoSuchFileException e) {
             // e.printStackTrace();
             String msg = String.format("%s [removeURL] not exist.", url);
-            logger.fine(msg);
+            logger.finest(msg);
             return;
         } catch (IOException e) {
             // e.printStackTrace();
@@ -186,7 +200,7 @@ public class Crawl implements Runnable {
         }
 
         String msg = String.format("%s [removeURL] success.", url);
-        logger.fine(msg);
+        logger.finest(msg);
     }
 
     /**
@@ -347,13 +361,13 @@ public class Crawl implements Runnable {
     @Override
     public void run() {
         String msg = String.format("%s starts ...", url);
-        logger.fine(msg);
+        logger.finest(msg);
 
         Document document = request(url);
         if (document == null) {
             removeURL(url);
             msg = String.format("%s [Request] failed to request!", url);
-            logger.fine(msg);
+            logger.finest(msg);
             return;
         }
 
@@ -363,7 +377,7 @@ public class Crawl implements Runnable {
         Path savingPath = generateSavingPath(url);
 
         msg = String.format("%s\n[title] %s\n[body] %s\n[savingPath] %s", url, title, body, savingPath);
-        logger.fine(msg);
+        logger.finest(msg);
 
         if (!save(savingPath, url, title, body, urlsList)) {
             msg = String.format("%s failed to save!", url);
