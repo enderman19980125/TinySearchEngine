@@ -39,9 +39,9 @@ public class Main {
         // demo();
 
         int numThreads = 16;
-        String firstURL = null;
-        String regexURL = "";
         String rootPath = null;
+        String firstURL = "http://www.njnu.edu.cn/";
+        String regexURL = "^https?://(www|news|grad|honors|jsjyxy|gjy|jny|spa|sxy|law|marx|jky|xlxy|tky|wxy|wy|xinchuan|sfy|math|physics|hky|dky|sky|energy|d|ceai|env|hy|spxy|music|msxy).njnu.edu.cn.*$";
 
         for (int i = 0; i < args.length; ++i) {
             if (args[i].equals("--num")) {
