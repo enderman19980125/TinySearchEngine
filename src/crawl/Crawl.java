@@ -17,11 +17,16 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 public class Crawl implements Runnable {
-    static private Path rootPath, urlsPath;
+    static private Path rootPath, waitPath, finishPath;
     static private Logger logger;
     static private ExecutorService fixedThreadPool;
     static private String regexURL = "";
+
     static private int secondsSinceLastAddURL = 0;
+    static private final int SECONDS_WAIT_TO_STOP = 60;
+
+    static private int fileIndex = 0, itemIndex = 0;
+    static private final int ITEMS_PER_FILE = 10000;
 
     private final String url;
 
@@ -55,11 +60,11 @@ public class Crawl implements Runnable {
      */
     static private void initializePath(String rootPath) throws IOException {
         Crawl.rootPath = Paths.get(rootPath);
-        Crawl.urlsPath = Crawl.rootPath.resolve(".urls");
-        if (!Files.exists(Crawl.rootPath))
-            Files.createDirectories(Crawl.rootPath);
-        if (!Files.exists(Crawl.urlsPath))
-            Files.createDirectories(Crawl.urlsPath);
+        Crawl.waitPath = Crawl.rootPath.resolve(".wait");
+        Crawl.finishPath = Crawl.rootPath.resolve(".finish");
+        if (!Files.exists(Crawl.rootPath)) Files.createDirectories(Crawl.rootPath);
+        if (!Files.exists(Crawl.waitPath)) Files.createDirectories(Crawl.waitPath);
+        if (!Files.exists(Crawl.finishPath)) Files.createDirectories(Crawl.finishPath);
     }
 
     /**
@@ -106,10 +111,10 @@ public class Crawl implements Runnable {
             fixedThreadPool.execute(new Crawl(url));
         }
 
-        while (secondsSinceLastAddURL <= 60) {
+        while (secondsSinceLastAddURL <= SECONDS_WAIT_TO_STOP) {
             TimeUnit.SECONDS.sleep(10);
             secondsSinceLastAddURL += 10;
-            if (secondsSinceLastAddURL >= 30) {
+            if (secondsSinceLastAddURL >= 20) {
                 String msg = String.format("%s seconds have passed since last adding URL.", secondsSinceLastAddURL);
                 logger.finest(msg);
             }
@@ -126,14 +131,14 @@ public class Crawl implements Runnable {
     }
 
     /**
-     * Load URLs from disk. The files are located in "${rootPath}/.urls".
+     * Load URLs from disk. The files are located in "${rootPath}/.wait".
      *
      * @return a list of URLs to be crawled
      * @throws IOException IOException
      */
     static protected List<String> loadURLs() throws IOException {
         List<String> urlsList = new LinkedList<>();
-        DirectoryStream<Path> stream = Files.newDirectoryStream(urlsPath);
+        DirectoryStream<Path> stream = Files.newDirectoryStream(waitPath);
         for (Path file : stream) {
             Scanner scanner = new Scanner(file);
             String url = scanner.nextLine();
@@ -143,18 +148,17 @@ public class Crawl implements Runnable {
     }
 
     /**
-     * Add URL to "${rootPath}/.urls", then add URL to thread pool.
+     * Add URL to "${rootPath}/.wait", then add URL to thread pool.
      *
      * @param currentURL current URL
      * @param nextURL    URL to be added
      */
     static protected void addURL(String currentURL, String nextURL) {
-        String uuid = UUID.nameUUIDFromBytes(nextURL.getBytes()).toString();
-        Path urlPath = urlsPath.resolve(uuid);
+        Path waitFilePath = generateWaitPath(nextURL);
 
         try {
-            Files.createFile(urlPath);
-            FileWriter fileWriter = new FileWriter(urlPath.toString());
+            Files.createFile(waitFilePath);
+            FileWriter fileWriter = new FileWriter(waitFilePath.toString());
             BufferedWriter writer = new BufferedWriter(fileWriter);
             writer.write(nextURL);
             writer.close();
@@ -177,29 +181,31 @@ public class Crawl implements Runnable {
     }
 
     /**
-     * Remove URL from "${rootPath}/.urls".
+     * Move URL from "${rootPath}/.wait" to "${rootPath}/.finish".
      *
      * @param url URL to be removed
      */
-    static protected void removeURL(String url) {
-        String uuid = UUID.nameUUIDFromBytes(url.getBytes()).toString();
-        Path urlPath = urlsPath.resolve(uuid);
+    static protected void finishURL(String url) {
+        Path waitFilePath = generateWaitPath(url);
+        Path finishFilePath = generateFinishPath(url);
+        Path finishParentPath = finishFilePath.getParent();
 
         try {
-            Files.delete(urlPath);
-        } catch (NoSuchFileException e) {
-            // e.printStackTrace();
-            String msg = String.format("%s [removeURL] not exist.", url);
-            logger.finest(msg);
-            return;
+            if (!Files.exists(finishParentPath)) Files.createDirectories(finishParentPath);
         } catch (IOException e) {
             // e.printStackTrace();
-            String msg = String.format("%s [removeURL] failed to remove!", url);
+        }
+
+        try {
+            Files.move(waitFilePath, finishFilePath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            // e.printStackTrace();
+            String msg = String.format("%s [finishURL] failed to move!", url);
             logger.severe(msg);
             return;
         }
 
-        String msg = String.format("%s [removeURL] success.", url);
+        String msg = String.format("%s [finishURL] success.", url);
         logger.finest(msg);
     }
 
@@ -272,14 +278,25 @@ public class Crawl implements Runnable {
     }
 
     /**
-     * Generate the saving path for the specific URL.
+     * Generate wait path for the specific URL.
      *
      * @param url URL
-     * @return saving path
+     * @return wait path like "${rootPath}/.wait/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
      */
-    static private Path generateSavingPath(String url) {
-        url = url.replaceAll("^https?://", "");
-        return rootPath.resolve(url);
+    static private Path generateWaitPath(String url) {
+        String uuid = UUID.nameUUIDFromBytes(url.getBytes()).toString();
+        return waitPath.resolve(uuid);
+    }
+
+    /**
+     * Generate finish path for the specific URL.
+     *
+     * @param url URL
+     * @return finish path like "${rootPath}/.finish/xxx/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+     */
+    static private Path generateFinishPath(String url) {
+        String uuid = UUID.nameUUIDFromBytes(url.getBytes()).toString();
+        return finishPath.resolve(uuid.substring(0, 4)).resolve(uuid);
     }
 
     /**
@@ -289,47 +306,51 @@ public class Crawl implements Runnable {
      * @return true if exists, false otherwise
      */
     static private boolean isExistURL(String url) {
-        Path contentPath = generateSavingPath(url).resolve("content");
+        Path contentPath = generateFinishPath(url).resolve("content");
         return Files.exists(contentPath);
     }
 
     /**
      * Save current webpage to disk.
      *
-     * @param savingPath saving path
-     * @param url        URL
-     * @param title      title of current webpage
-     * @param body       body of current webpage
-     * @param nextURLs   a list of URLs from current URL
+     * @param url      URL
+     * @param nextURLs a list of URLs from current URL
+     * @param title    title of current webpage
+     * @param body     body of current webpage
      * @return true if success, false otherwise
      */
-    static private boolean save(Path savingPath, String url, String title, String body, List<String> nextURLs) {
-        StringBuilder contentBuilder = new StringBuilder();
-        contentBuilder.append("[URL]").append("\n");
-        contentBuilder.append(url).append("\n");
-        contentBuilder.append("[nextURLs]").append("\n");
-        for (String nextURL : nextURLs) contentBuilder.append(nextURL).append(" ");
-        contentBuilder.append("\n");
-        contentBuilder.append("[title]").append("\n");
-        contentBuilder.append(title).append("\n");
-        contentBuilder.append("[body]").append("\n");
-        contentBuilder.append(body).append("\n");
-        String content = contentBuilder.toString();
-        Path contentPath = savingPath.resolve("content");
-
-        try {
-            if (!Files.exists(savingPath))
-                Files.createDirectories(savingPath);
-            if (Files.exists(contentPath))
-                Files.delete(contentPath);
-            Files.createFile(contentPath);
-        } catch (IOException e) {
-            // e.printStackTrace();
-            return false;
+    static private synchronized boolean save(String url, List<String> nextURLs, String title, String body) {
+        if (itemIndex >= ITEMS_PER_FILE) {
+            ++fileIndex;
+            itemIndex = 0;
         }
 
+        StringBuilder contentBuilder = new StringBuilder();
+
+        contentBuilder.append("[").append(itemIndex).append("]");
+        contentBuilder.append("\t");
+
+        contentBuilder.append("[URL]").append("\t");
+        contentBuilder.append(url).append("\t");
+
+        contentBuilder.append("[nextURLs]").append("\t");
+        for (String nextURL : nextURLs) contentBuilder.append(nextURL).append(" ");
+        contentBuilder.append("\t");
+
+        contentBuilder.append("[title]").append("\t");
+        title = title.replaceAll("[\t\n]", " ").replaceAll(" +", " ").trim();
+        contentBuilder.append(title).append("\t");
+
+        contentBuilder.append("[body]").append("\t");
+        body = body.replaceAll("[\t\n]", " ").replaceAll(" +", " ").trim();
+        contentBuilder.append(body).append("\n");
+
+        String content = contentBuilder.toString();
+        Path filePath = rootPath.resolve(String.format("part-%d", fileIndex));
+
         try {
-            FileWriter fileWriter = new FileWriter(contentPath.toString());
+            if (!Files.exists(filePath)) Files.createFile(filePath);
+            FileWriter fileWriter = new FileWriter(filePath.toString(), true);
             BufferedWriter writer = new BufferedWriter(fileWriter);
             writer.write(content);
             writer.close();
@@ -337,6 +358,8 @@ public class Crawl implements Runnable {
             // e.printStackTrace();
             return false;
         }
+
+        ++itemIndex;
 
         return true;
     }
@@ -355,8 +378,8 @@ public class Crawl implements Runnable {
      * The process involves 5 steps:
      * (1) Crawl webpage.
      * (2) Parse title and body, then save to disk.
-     * (3) Parse all valid URLs in the webpage, then add to "${rootPath}/.urls".
-     * (4) Remove current URL from "${rootPath}/.urls".
+     * (3) Parse all valid URLs in the webpage, then add to "${rootPath}/.wait".
+     * (4) Move current URL from "${rootPath}/.wait" to "${rootPath}/.finish".
      */
     @Override
     public void run() {
@@ -365,7 +388,7 @@ public class Crawl implements Runnable {
 
         Document document = request(url);
         if (document == null) {
-            removeURL(url);
+            finishURL(url);
             msg = String.format("%s [Request] failed to request!", url);
             logger.finest(msg);
             return;
@@ -374,12 +397,11 @@ public class Crawl implements Runnable {
         String title = parseTitle(document);
         String body = parseBody(document);
         List<String> urlsList = filterURLs(parseURLs(document));
-        Path savingPath = generateSavingPath(url);
 
-        msg = String.format("%s\n[title] %s\n[body] %s\n[savingPath] %s", url, title, body, savingPath);
+        msg = String.format("%s\n[title] %s\n[body] %s", url, title, body);
         logger.finest(msg);
 
-        if (!save(savingPath, url, title, body, urlsList)) {
+        if (!save(url, urlsList, title, body)) {
             msg = String.format("%s failed to save!", url);
             logger.severe(msg);
             return;
@@ -390,7 +412,7 @@ public class Crawl implements Runnable {
                 addURL(url, nextURL);
             }
 
-        removeURL(url);
+        finishURL(url);
         msg = String.format("%s success.", url);
         logger.info(msg);
     }
