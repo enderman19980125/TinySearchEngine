@@ -3,16 +3,14 @@ package pagerank;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 
 public class BuildGraph {
-    public static class BuildGraphMapper extends Mapper<NullWritable, BytesWritable, Text, Text> {
-        public void map(NullWritable key, BytesWritable value, Context context) throws IOException, InterruptedException {
-            String content = new String(value.getBytes()).replaceAll("\0", "");
-            ContentFileInfo contentFileInfo = new ContentFileInfo(content);
+    public static class BuildGraphMapper extends Mapper<LongWritable, Text, Text, Text> {
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            ContentFileInfo contentFileInfo = new ContentFileInfo(value.toString());
 
             Text empty = new Text();
             Text fromURL = new Text(contentFileInfo.getURL());

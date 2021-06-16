@@ -52,7 +52,6 @@ public class Main {
         Job job = getJobInstance();
         job.setMapperClass(pagerank.BuildGraph.BuildGraphMapper.class);
         job.setReducerClass(pagerank.BuildGraph.BuildGraphReducer.class);
-        job.setInputFormatClass(pagerank.CompleteFileInputFormat.class);
         job.waitForCompletion(true);
     }
 

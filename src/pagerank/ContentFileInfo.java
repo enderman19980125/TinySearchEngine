@@ -22,16 +22,20 @@ public class ContentFileInfo {
         return body;
     }
 
-    ContentFileInfo(String content) {
-        StringTokenizer contentTokenizer = new StringTokenizer(content, "\n");
-        while (contentTokenizer.hasMoreTokens()) {
-            String line = contentTokenizer.nextToken();
+    public ContentFileInfo(String content) {
+        StringTokenizer stringTokenizer = new StringTokenizer(content, "\t", true);
+
+        while (stringTokenizer.hasMoreTokens()) {
+            String line = stringTokenizer.nextToken();
             if (line.equals("[URL]")) {
-                URL = contentTokenizer.nextToken();
+                stringTokenizer.nextToken();
+                URL = stringTokenizer.nextToken();
                 continue;
             }
             if (line.equals("[nextURLs]")) {
-                String urls = contentTokenizer.nextToken();
+                stringTokenizer.nextToken();
+                String urls = stringTokenizer.nextToken();
+                if (urls.equals("\t")) continue;
                 StringTokenizer urlsTokenizer = new StringTokenizer(urls, " ");
                 while (urlsTokenizer.hasMoreTokens()) {
                     nextURLs.add(urlsTokenizer.nextToken());
@@ -39,11 +43,13 @@ public class ContentFileInfo {
                 continue;
             }
             if (line.equals("[title]")) {
-                title = contentTokenizer.nextToken();
+                stringTokenizer.nextToken();
+                title = stringTokenizer.nextToken();
                 continue;
             }
             if (line.equals("[body]")) {
-                body = contentTokenizer.nextToken();
+                stringTokenizer.nextToken();
+                body = stringTokenizer.nextToken();
             }
         }
     }
