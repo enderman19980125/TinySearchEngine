@@ -7,7 +7,7 @@ import org.jsoup.nodes.Document;
 
 public class Main {
     static private void demo() {
-        Document document = Crawl.request("http://www.njnu.edu.cn/");
+        Document document = Crawl.request("http://music.njnu.edu.cn/info/1031/2435.htm");
         String title = Crawl.parseTitle(document);
         String body = Crawl.parseBody(document);
         List<String> linksList = Crawl.parseURLs(document);
@@ -36,7 +36,7 @@ public class Main {
     }
 
     static public void main(String[] args) throws IOException, InterruptedException {
-        // demo();
+//         demo();
 
         int numThreads = 16;
         String rootPath = null;

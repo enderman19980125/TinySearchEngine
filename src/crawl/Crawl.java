@@ -277,7 +277,7 @@ public class Crawl implements Runnable {
     }
 
     /**
-     * Filter URLs within domain "*.njnu.edu.cn".
+     * Filter URLs within domain "*.njnu.edu.cn" and remove URL suffix "#xxx".
      *
      * @param urlsList a list of URLs
      * @return a list of filtered URLs
@@ -285,8 +285,11 @@ public class Crawl implements Runnable {
     static protected List<String> filterURLs(List<String> urlsList) {
         List<String> filteredURLsList = new LinkedList<>();
         for (String url : urlsList) {
-            if (url.matches(regexURL))
+            if (url.matches(regexURL)) {
+                int k = url.lastIndexOf("#");
+                if (k > 0) url = url.substring(0, k);
                 filteredURLsList.add(url);
+            }
         }
         return filteredURLsList;
     }
