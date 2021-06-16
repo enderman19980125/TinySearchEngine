@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Result</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.2/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+
+<div class="row m-3">
+    <div class="col-2">
+        <img src="{% static 'retrieve/conybrown.jpg' %}" alt="conybrown" height="100px">
+    </div>
+    <div class="col-6 my-auto">
+        <div class="input-group">
+            <input type="text" class="form-control">
+            <button class="btn btn-primary" type="button" id="button-addon2">Button</button>
+        </div>
+    </div>
+</div>
+
+<div class="m-5">
+    <div>
+        <div class="fs-3"><a href="#">title</a></div>
+        <div>text text text text text text text text text text text text text text</div>
+        <div class="text-muted"><a href="#" class="text-reset">www.1.com</a></div>
+    </div>
+</div>
+
+</body>
+
+</html>
