@@ -138,12 +138,19 @@ public class Crawl implements Runnable {
      */
     static protected List<String> loadURLs() throws IOException {
         List<String> urlsList = new LinkedList<>();
-        DirectoryStream<Path> stream = Files.newDirectoryStream(waitPath);
-        for (Path file : stream) {
-            Scanner scanner = new Scanner(file);
-            String url = scanner.nextLine();
-            urlsList.add(url);
+        DirectoryStream<Path> directoryStream = Files.newDirectoryStream(waitPath);
+
+        for (Path subDirectory : directoryStream) {
+            DirectoryStream<Path> subdirectoryStream = Files.newDirectoryStream(subDirectory);
+            for (Path file : subdirectoryStream) {
+                Scanner scanner = new Scanner(file);
+                while (scanner.hasNextLine()) {
+                    String url = scanner.nextLine();
+                    if (!url.equals("")) urlsList.add(url);
+                }
+            }
         }
+
         return urlsList;
     }
 
@@ -155,6 +162,13 @@ public class Crawl implements Runnable {
      */
     static protected void addURL(String currentURL, String nextURL) {
         Path waitFilePath = generateWaitPath(nextURL);
+        Path waitParentPath = waitFilePath.getParent();
+
+        try {
+            if (!Files.exists(waitParentPath)) Files.createDirectories(waitParentPath);
+        } catch (IOException e) {
+            // e.printStackTrace();
+        }
 
         try {
             Files.createFile(waitFilePath);
@@ -285,7 +299,7 @@ public class Crawl implements Runnable {
      */
     static private Path generateWaitPath(String url) {
         String uuid = UUID.nameUUIDFromBytes(url.getBytes()).toString();
-        return waitPath.resolve(uuid);
+        return waitPath.resolve(uuid.substring(0, 4)).resolve(uuid);
     }
 
     /**
@@ -306,8 +320,8 @@ public class Crawl implements Runnable {
      * @return true if exists, false otherwise
      */
     static private boolean isExistURL(String url) {
-        Path contentPath = generateFinishPath(url).resolve("content");
-        return Files.exists(contentPath);
+        Path finishFilePath = generateFinishPath(url);
+        return Files.exists(finishFilePath);
     }
 
     /**
