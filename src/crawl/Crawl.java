@@ -116,7 +116,7 @@ public class Crawl implements Runnable {
             secondsSinceLastAddURL += 10;
             if (secondsSinceLastAddURL >= 20) {
                 String msg = String.format("%s seconds have passed since last adding URL.", secondsSinceLastAddURL);
-                logger.finest(msg);
+                logger.fine(msg);
             }
         }
 
@@ -328,6 +328,16 @@ public class Crawl implements Runnable {
     }
 
     /**
+     * Remove all control and invisible characters from the specific string.
+     *
+     * @param content string to be cleaned
+     * @return a cleaned string
+     */
+    static private String clean(String content) {
+        return content.replaceAll("[!\\p{C}]", " ").replaceAll(" +", " ").trim();
+    }
+
+    /**
      * Save current webpage to disk.
      *
      * @param url      URL
@@ -354,12 +364,12 @@ public class Crawl implements Runnable {
         for (String nextURL : nextURLs) contentBuilder.append(nextURL).append(" ");
         contentBuilder.append("\t");
 
+        title = clean(title);
         contentBuilder.append("[title]").append("\t");
-        title = title.replaceAll("[\t\n]", " ").replaceAll(" +", " ").trim();
         contentBuilder.append(title).append("\t");
 
+        body = clean(body);
         contentBuilder.append("[body]").append("\t");
-        body = body.replaceAll("[\t\n]", " ").replaceAll(" +", " ").trim();
         contentBuilder.append(body).append("\n");
 
         String content = contentBuilder.toString();
