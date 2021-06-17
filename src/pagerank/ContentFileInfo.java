@@ -3,7 +3,7 @@ package pagerank;
 import java.util.*;
 
 public class ContentFileInfo {
-    private String URL, title, body;
+    private String URL = "URL", title = "title", body = "body";
     private final List<String> nextURLs = new LinkedList<>();
 
     public String getURL() {
@@ -48,8 +48,8 @@ public class ContentFileInfo {
                 continue;
             }
             if (line.equals("[body]")) {
-                stringTokenizer.nextToken();
-                body = stringTokenizer.nextToken();
+                if (stringTokenizer.hasMoreTokens()) stringTokenizer.nextToken();
+                if (stringTokenizer.hasMoreTokens()) body = stringTokenizer.nextToken();
             }
         }
     }

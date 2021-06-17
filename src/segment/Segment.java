@@ -39,6 +39,7 @@ public class Segment {
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             StringBuilder stringBuilder = new StringBuilder();
             boolean isFirst = true;
+            int num = 0;
 
             for (Text value : values) {
                 if (value.getLength() > 0) {
@@ -47,7 +48,9 @@ public class Segment {
                     } else {
                         stringBuilder.append(" ");
                     }
+                    ++num;
                     stringBuilder.append(value);
+                    if (num > 100000) return;
                 }
             }
 
