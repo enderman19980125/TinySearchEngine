@@ -6,5 +6,6 @@ app_name = 'TimeTable'
 
 urlpatterns = [
     path('', view_index, name='view_index'),
-    path('r/', view_result, name='view_result'),
+    path('search/', view_search, name='view_search'),
+    path('api_search_by_keyword/', api_search_by_keyword, name='view_search'),
 ]

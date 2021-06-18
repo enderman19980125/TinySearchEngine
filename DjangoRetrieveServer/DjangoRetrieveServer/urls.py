@@ -18,5 +18,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('retrieve.urls')),
+    path('apps/retrieve-njnu/', include('retrieve.urls')),
 ]
