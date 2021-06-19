@@ -1,0 +1,265 @@
+\documentclass{ctexart}
+
+\usepackage{cite}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{listings}
+%\usepackage{hyperref}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolor}{rgb}{0.95,0.95,0.92}
+
+\lstset{
+    backgroundcolor=\color{backcolor},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+%   numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+
+\newcommand{\code}[1]{\colorbox{backcolor}{\lstinline|#1|}}
+
+\title{小型搜索引擎的设计与实现}
+\author{孙振强}
+\date{2021年06月18日}
+
+\begin{document}
+
+    \maketitle
+    \newpage
+
+    \tableofcontents
+    \newpage
+
+
+    \section{综述}\label{sec:introduction}
+
+    网页搜索引擎（Web Search Engine）或互联网搜索引擎（Internet Search Engine）是一种用于网络搜索（互联网搜索）的软件系统。搜索引擎在万维网（World Wide Web）上以文本网页搜索的方式获取特定信息。搜索结果通常以一行行的形式显示，其中每行结果为一个网页，该页面被称为搜索引擎结果页面（SERPs, Search Engine Results Pages）。信息包含指向网页、图像、视频、图表、文章、论文及其它类型文件的链接。一些搜索引擎还可以挖掘数据库或开放目录中的数据。不同于仅由人工维护的网页目录，搜索引擎使用网络爬虫来实时维护信息。不能被网页搜索引擎搜索到的互联网内容通常被称为“深网”（Deep Web）\cite{wikipedia-search-engine}。
+
+    目前使用较为广泛的搜索引擎有 Google、Bing、Baidu 等。其中，Google 和 Bing 搜索引擎在全球广泛使用，支持世界上几乎所有语种的语言，提供了对于世界上几乎所有网站的搜索服务。Baidu 搜索引擎在中国广泛使用，对于中文搜索能返回质量较高的搜索结果。除了传统的文本检索模式（Text-Web）外，这三种搜索引擎都提供了多模态检索和跨模态检索的功能，例如语音检索（Voice-Web）、图片检索（Image-Web）、相似图片检索（Image-Image）等功能。
+
+    Google、Bing、Baidu 这些搜索引擎属于全文搜索引擎，此外还有目录搜索引擎、垂直搜索引擎、元搜索引擎\cite{baike-search-engine}，下面简要介绍：
+
+    \begin{enumerate}
+        \item 目录搜索引擎（Index Search Engine）：预先设有明确的层级框架，采用人工或半自动的方式检索网页，将网页归档到相应的的目录下。常见的有导航页面和门户网站等；
+        \item 全文搜索引擎（Full Text Search Engine）：预先爬取网页信息，并建立关键词索引，后根据用户查询的关键词检索数据库，返回相关页面。这是当今主流的搜索引擎，常见的有百度和谷歌等；
+        \item 垂直搜索引擎（Vertical Search Engine）：针对某个特定领域而建立的专用搜索引擎。相比于全文搜索引擎，垂直搜索引擎的检索范围很小，但能够深入挖掘该领域的专业信息，检索质量较高。常见的有种子搜索引擎、小说搜索引擎、表情包搜索引擎等；
+        \item 元搜索引擎（Meta Search Engine）：整合多个搜索引擎的结果，并在一个界面上集中展示。元搜索引擎通常没有自己的网络爬虫和数据库，一般实时汇总几个不同搜索引擎的搜索结果。常见的有360综合搜索等；
+    \end{enumerate}
+
+    此外，一般网站都提供有站内搜索功能，这可以看成一个仅搜索指定站点的小型搜索引擎。例如，在社交媒体网站中通过关键字搜索动态，在电商网站中通过关键词搜索相关商品，在视频网站中通过关键字搜索视频，在新闻网站中通过关键字搜索新闻。
+
+    在这个信息爆炸的时代，互联网上充斥着海量的信息，而搜索引擎能帮我们在短短几秒钟的时间内，搜索到我们想要的结果，这就是搜索引擎的魅力。可以说，网络时代离不开搜索引擎，搜索引擎是人们浏览网络世界的最重要的途径。
+
+    本项目是小型搜索引擎的设计与实现，旨在设计一套完整的搜索引擎系统，实现一个针对特定网站真实可用的搜索引擎系统。本项目紧密围绕课程核心内容，使用 HDFS 和 HBase 进行数据存储，使用 Hadoop MapReduce 进行数据处理，将并行程序设计的思想充分融入到系统的设计之中。本文完全阐述了系统的设计与实现工作，以介绍系统架构开始，再具体介绍四个系统功能模块，后叙述项目进行过程中遇到的困难，最后提出系统在未来的改进之处，并谈谈自己的收获。
+
+
+    \section{系统架构}\label{sec:archicture}
+
+    本系统采用双节点的服务器集群架构，数据分布式存储在两个节点中，非结构化的数据存储在 HDFS 上，结构化的数据存储在 HBase 上。系统包含四个功能模块，分别是爬虫模块、中文分词模块、PageRank 模块、检索模块。图\ref{fig:archicture} 展示了完整的系统架构。
+
+    本部分从物理架构、数据架构、业务架构三个层次对系统架构进行介绍。图\ref{fig:archicture} 中，绿色的方框表示物理架构部分，橙色的方框表示数据架构部分，蓝色的方框表示业务架构部分。由于 HDFS 和 HBase 架构较为复杂，因此我们使用单独的两节内容分别介绍。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/archicture}
+        \caption{系统架构示意图}
+        \label{fig:archicture}
+    \end{figure}
+
+    \subsection{物理架构}\label{subsec:crawl}
+    本系统使用了两台学院配发的台式机作为服务器。台式机配置了 Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz 四核四线程的中央处理器，Samsung DIMM DDR4 Synchronous Unbuffered (Unregistered) 2667 MHz 容量为 4 GB 的内存，KINGSTON SV300S3 容量为 120 GB 的固态硬盘，Ubuntu 20.04.2 LTS (Focal Fossa) 的服务器操作系统（无图形化界面）。
+
+    两台服务器位于自己路由器搭建的内网中，表\ref{tab:archicture} 列出了两台服务器的相关配置信息。1 号服务器是主节点，HDFS 的 \code{NameNode} JPS 和 HBase 的 \code{HMaster}、\code{ThriftServer} JPS 均部署在 1 号服务器上。
+
+    注意，jps是一条终端命令，可以列出系统中当前运行的 Java HotSpot VMs\cite{docs-jps}，表\ref{tab:archicture} 中的 HDFS JPS 和 HBase JPS 分别代表为 HDFS 和 HBase 提供服务的 Java HotSpot VMs。
+
+    \begin{table}[h]
+        \centering
+        \caption{服务器配置表}
+        \label{tab:archicture}
+        \begin{tabular}{c|cccc}
+            \hline
+            服务器      & 1号服务器         & 2号服务器        \\ \hline
+            Hostname & desktop-brown & slaker       \\ \hline
+            IP 地址    & 192.168.0.20  & 192.168.0.30 \\ \hline
+            HDFS JPS
+            & \begin{tabular}{c@{}c@{}}
+                  DataNode, NameNode, SecondaryNameNode, \\
+                  NodeManager, ResourceManager
+            \end{tabular}
+            & DataNode \\ \hline
+            HBase JPS
+            & \begin{tabular}{c@{}c@{}}
+                  HRegionServer, HQuorumPeer, \\
+                  HMaster, ThriftServer
+            \end{tabular}
+            & \begin{tabular}{c@{}c@{}}
+                  HRegionServer, \\
+                  HQuorumPeer
+            \end{tabular} \\ \hline
+        \end{tabular}
+    \end{table}
+
+    \subsection{HDFS 架构}\label{subsec:crawl}
+
+    HDFS 是 Hadoop 分布式文件系统（Hadoop Distributed File System），支持对应用程序数据进行高吞吐量访问\cite{docs-hdfs}。HDFS 是 Hadoop 的一个子模块，因此我们需要在 Hadoop 中配置 HDFS。注意，以下过程建立在单节点配置正确的基础上，请先参照 Hadoop 官方文档\cite{docs-hadoop-single-node} 配置单节点环境。
+
+    打开 \code{core-site.xml} 配置文件，配置 HDFS 在 1 号服务器的 9000 端口上启动，HDFS 存储在每台服务器的 \code{/home/hadoop-\$\{user.name\}} 路径下。修改如下：
+
+    \begin{lstlisting}[language=XML]
+<configuration>
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://desktop-brown:9000</value>
+    </property>
+    <property>
+        <name>hadoop.tmp.dir</name>
+        <value>/home/hadoop-${user.name}</value>
+    </property>
+</configuration>
+    \end{lstlisting}
+
+    打开 \code{hdfs-site.xml} 配置文件，将数据副本数量改为一份，即不进行数据冗余备份。修改如下：
+
+    \begin{lstlisting}[language=XML]
+<configuration>
+    <property>
+        <name>dfs.replication</name>
+        <value>1</value>
+    </property>
+</configuration>
+    \end{lstlisting}
+
+    打开 \code{workters} 配置文件，添加两台服务器的 hostname：
+
+    \begin{lstlisting}[language=bash]
+desktop-brown
+slaker
+    \end{lstlisting}
+
+    至此，我们将单节点的 HDFS 环境变成了双节点的 HDFS 环境。下面，在 1 号服务器上执行命令格式化 HDFS：
+
+    \begin{lstlisting}[language=bash]
+./bin/hdfs namenode -format
+    \end{lstlisting}
+
+    接着，执行命令启动 HDFS 和管理器：
+
+    \begin{lstlisting}[language=bash]
+./sbin/start-all.sh
+    \end{lstlisting}
+
+    我们可以在浏览器中访问 \code{http://192.168.0.20:9870/}，查看 HDFS 的运行状态。图\ref{fig:archicture_hdfs-web} 展示了 Namenode 的相关信息，我们可以看到，Namenode 在两台服务器上均已启动并运行。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/archicture_hdfs-web}
+        \caption{HDFS 监控页面}
+        \label{fig:archicture_hdfs-web}
+    \end{figure}
+
+    \subsection{HBase 架构}\label{subsec:crawl}
+
+    HBase 是 Hadoop 数据库（Hadoop Database），是一个分布式的可拓展的大数据存储数据库\cite{docs-hbase}。下面，我们对 HBase 的配置过程进行简要说明。注意，以下过程省略了在 \code{hbase-env.sh} 文件中对 Java 路径的配置。
+
+    打开 \code{hbase-site.xml} 配置文件，分别配置启动分布式集群部署、路径为 HDFS 根目录下的 code 文件夹、zookeeper 要管理的两台服务器的 hostname、zookeeper 数据存储路径。修改如下：
+
+    \begin{lstlisting}[language=XML]
+<configuration>
+  <property>
+    <name>hbase.cluster.distributed</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>hbase.rootdir</name>
+    <value>hdfs://desktop-brown:9000/hbase</value>
+  </property>
+  <property>
+    <name>hbase.zookeeper.quorum</name>
+    <value>desktop-brown,slaker</value>
+  </property>
+  <property>
+    <name>hbase.zookeeper.property.dataDir</name>
+    <value>/home/zookeeper</value>
+  </property>
+</configuration>
+    \end{lstlisting}
+
+    打开 \code{regionservers} 配置文件，添加两台服务器的 hostname：
+
+    \begin{lstlisting}[language=bash]
+desktop-brown
+slaker
+    \end{lstlisting}
+
+    至此，我们完成了双节点 HBase 的配置工作。下面，在 1 号服务器上执行命令启动 HBase：
+
+    \begin{lstlisting}[language=bash]
+./bin/start-hbase.sh
+    \end{lstlisting}
+
+    接着，执行命令启动 Thrift 服务器：
+
+    \begin{lstlisting}[language=bash]
+./bin/hbase thrift start
+    \end{lstlisting}
+
+    我们可以在浏览器中访问 \code{http://192.168.0.20:16010/}，查看 HBase 的运行状态。图\ref{fig:archicture_hbase-web} 展示了 HBase 的相关信息，我们可以看到，Region Servers 在两台服务器上均已启动并运行。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/archicture_hbase-web}
+        \caption{HBase 监控页面}
+        \label{fig:archicture_hbase-web}
+    \end{figure}
+
+    \subsection{数据架构}\label{subsec:crawl}
+
+    \subsection{业务架构}\label{subsec:crawl}
+
+
+    \section{功能模块设计}\label{sec:modules}
+
+    \subsection{爬虫模块}\label{subsec:crawl}
+
+    \subsection{中文分词模块}\label{subsec:segment}
+
+    \subsection{PageRank模块}\label{subsec:pagerank}
+
+    \subsection{检索模块}\label{subsec:retrieve}
+
+
+    \section{项目演示}\label{sec:demo}
+    1
+
+
+    \section{遇到的困难}\label{sec:difficulty}
+
+    2\cite{pascal} 123312\cite{search-engine}
+
+
+    \section{未来的改进}\label{sec:improvement}
+
+
+    \section{自己的收获}\label{sec:achievement}
+
+    \bibliographystyle{unsrt}
+    \bibliography{references}
+
+\end{document}
