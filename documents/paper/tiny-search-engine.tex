@@ -42,6 +42,54 @@
     \maketitle
     \newpage
 
+    \begin{center}
+        \LARGE 摘要
+    \end{center}
+
+    本项目设计并实现了一个小型的搜索引擎系统，支持对 “南京师范大学” 的主站点、阳光网、研究生院网站、所有 28 个二级学院网站进行全文检索。
+
+    系统采用双节点的物理架构，使用千兆网络在局域网内连接。系统采用分布式的数据架构，使用 HDFS 和 HBase 作为底层数据存储结构。系统数据分为五个部分，分别为：非结构化的 \code{RAW} 数据、\code{SEGMENT} 数据、\code{PAGERANK} 数据，和结构化的 \code{NNU\_PAGES} 表数据、\code{NNU\_WORDS} 表数据。系统包含四个功能模块，分别为：爬虫模块、中文分词模块、PageRank 模块、检索模块。
+
+    爬虫模块使用 Java 多线程技术从互联网上爬取并解析网页数据。模块使用 \code{Jsoup} 库操作 HTML 文档，使用 \code{UUID} 库实现网页判重功能，输出 \code{RAW} 数据，并迁移到 \code{NNU\_PAGES} 表中。共计爬取到总大小为 1.2 GB 的近 20 万个网页。
+
+    中文分词模块使用 MapReduce 技术构建倒排索引。模块使用开源的 “结巴分词” 库实现分词操作，输入 \code{RAW} 数据，输出 \code{SEGMENT} 数据，并迁移到 \code{NNU\_WORDS} 表中。共计输出总大小为 4.2 GB 的 53 万余个关键词。
+
+    PageRank 模块使用 MapReduce 技术计算每个页面的价值。模块使用两个 MapReduce 任务分别完成构建链接图和迭代计算 PageRank 值的操作，输入 \code{RAW} 数据，输出 \code{PAGERANK} 数据，并迁移到 \code{NNU\_PAGES} 表中。
+
+    检索模块使用 Django 库搭建 Web 服务器并提供关键词搜索服务。模块使用 \code{HappyBase} 库与 HBase 进行数据通信，输入 \code{NNU\_PAGES} 表和 \code{NNU\_WORDS} 表。
+
+    本项目的代码开源在 GitHub 上，并提供公网演示地址。
+
+    最后，总结了自己在系统研发过程中遇到的困难，提出了系统未来有待完善的地方，并谈论了自己在本项目中的收获和感悟。
+
+    \textbf{关键词}：搜索引擎；Hadoop；MapReduce；HDFS；HBase；PageRank
+
+    \newpage
+
+    \begin{center}
+        \LARGE Abstract
+    \end{center}
+
+    This project has designed and implemented a small search engine system to support full-text search on some websites within doamin "Nanjing Normal University", including the Main Website, the Sunshine Website, the website of Graduation, and all 28 secondary school websites.
+
+    The system adopts a two-node physical structure and uses a gigabit network to connect in the local area network. The system adopts a distributed data architecture and uses HDFS and HBase as the underlying data storage structure. The system data is divided into five parts, namely: unstructured \code{RAW} data, \code{SEGMENT} data, \code{PAGERANK} data, and structured \code{NNU\_PAGES} table data, \code{NNU\_WORDS} Table data. The system contains four functional modules, namely: crawler module, Chinese word segmentation module, PageRank module, and retrieval module.
+
+    The crawler module uses Java multi-threading technology to crawl and parse webpage data from the Internet. The module uses the \code{Jsoup} library to manipulate HTML documents, uses the \code{UUID} library to check the duplication of webpages, outputs the \code{RAW} data, and migrates it to the \code{NNU\_PAGES} table. A total of nearly 200,000 web pages with a total size of 1.2 GB were crawled.
+
+    The Chinese word segmentation module uses MapReduce technology to build an inverted index. The module uses the open source "Jieba" library to implement word segmentation, input \code{RAW} data, output \code{SEGMENT} data, and migrate to the \code{NNU\_WORDS} table. In total, more than 530,000 keywords with a total size of 4.2 GB are output.
+
+    The PageRank module uses MapReduce technology to calculate the value of each webpage. The module uses two MapReduce tasks to construct the link graph and iteratively calculate the PageRank value respectively, input \code{RAW} data, output \code{PAGERANK} data, and migrate to the \code{NNU\_PAGES} table.
+
+    The retrieval module uses the Django library to build a Web server and provide keyword search services. The module uses the \code{HappyBase} library to communicate with HBase and visit the \code{NNU\_PAGES} table and the \code{NNU\_WORDS} table.
+
+    The code of this project is open source on GitHub, and the public network demo address is provided.
+
+    Finally, I summarized the difficulties I encountered in the process of system research and development, put forward the areas where the system needs to be improved in the future, and talked about my own gains and insights in this project.
+
+    \textbf{Key words}: Search Engine; Hadoop; MapReduce; HDFS; HBase; PageRank
+
+    \newpage
+
     \tableofcontents
     \newpage
 
