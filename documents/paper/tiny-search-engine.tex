@@ -354,6 +354,8 @@ slaker
 
     \subsubsection{RAW 数据}\label{subsubsec:crawl_data}
 
+    爬虫程序共计爬取了南京师范大学域名下的 198,649 个网页，总大小 1.2 GB。
+
     爬虫得到的数据分块存储在磁盘中，如图\ref{fig:crawl_files} 所示。具体来说，每个页面需要保存四个字段：URL、nextURLs、title、body，每个页面占用一行。每个文件中存储 10000 个页面，即每个文件有 10000 行。若文件超过 10000 行，则会创建一个新文件来保存数据，文件名按照格式 \code{part-0}、\code{part-1}、\code{part-2} …… 顺序编号。下面展示了一个 \code{part-*} 文件的结构样例。注意，每个 \code{[xxx]} 是一个字段名，字段名和内容之间使用分隔符 “\verb|\|t” 隔开，因此 title 和 body 中的 “\verb|\|t” 字符需要全部过滤掉。
 
     \begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
@@ -386,18 +388,239 @@ slaker
 
     \subsection{中文分词模块}\label{subsec:segment}
 
+    中文分词模块的目的是建立倒排索引，使用 Hadoop MapReduce 进行并行计算。对于每个关键词，会存储所有包含该关键词的网页及该关键词在网页中出现的位置。
+
+    \subsubsection{MapReduce 设计}\label{subsubsec:segment_mapreduce}
+
+    图\ref{fig:segment} 展示了中文分词的 MapReduce 过程。下面我们就 Map 和 Reduce 过程分别进行说明：
+
+    在 Map 过程中，每次读入的是一行数据，即一个网页的数据。以图\ref{fig:segment} 的第一行数据为例，该 Mapper 函数的 \code{key} 是偏移量，我们不需要用到，\code{value} 是 “[0] [URL] www.1.com [nextURLs] www.2.com www.3.com [title] title-1 [body] body-1”。从 \code{value} 中解析出该网页的 title 和 body。
+
+    对 title 和 body 进行中文分词，这里我们使用的是开源的 “结巴分词 Java 版”\cite{github-jieba-java}。使用结巴分词分别对 title 和 body 进行中文分词操作，得到一个关键词列表，对于每个关键词，若其出现在 title 中，则使用 \code{url@@s-t} 标识位置，若其出现在 body 中，则使用 \code{url@s-t} 标识位置，其中 \code{s} 是关键词开始位置的偏移量，\code{t} 是关键词结束位置的偏移量。
+
+    对于该行数据，假设分词后，title 中有一个关键词 “title”，body 中有一个关键词 “body”，则 Mapper 函数会输出两个键值对 \code{www.1.com@@0-4} 和 \code{www.1.com@0-3}，表示 “title” 出现在 www.1.com 中 title 的第 0 - 4 个字符处，“body” 出现在 www.1.com 中 body 的第 0 - 3 个字符处。
+
+    在 Reduce 过程中，输入的 \code{key} 是关键词，原样输出，而输入的 \code{value} 是一个返回出现位置字符串的迭代器，我们将迭代器中的所有字符串用空格拼接起来后，就直接输出。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/segment}
+        \caption{中文分词 MapReduce 过程示意图}
+        \label{fig:segment}
+    \end{figure}
+
+    \subsubsection{SEGMENT 数据}\label{subsubsec:segment_data}
+
+    使用 Hadoop MapReduce 部署任务，如图\ref{fig:segment_tasks} 所示。输出的倒排索引文件中，共计有 537,406 个关键词，总大小 4.2 GB。图\ref{fig:segment_rows} 展示了倒排索引文件中的部分数据，例如关键词 “一两千” 在 70030.htm 中 body 第 1846-1849 字符处和 6856.htm 中 body 第 1597-1600 字符处出现。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/segment_tasks}
+        \caption{Hadoop 任务管理页面}
+        \label{fig:segment_tasks}
+    \end{figure}
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/segment_rows}
+        \caption{倒排索引文件中的部分数据}
+        \label{fig:segment_rows}
+    \end{figure}
+
+    \subsubsection{迁移到 HBase}\label{subsubsec:segment_migrate}
+
+    最后，我们将倒排索引文件中的数据迁移到 HBase 的 \code{NNU\_WORDS} 表的 \code{segment} 族中，\code{NNU\_WORDS} 表的结构如表\ref{tab:archicture_nnu-words} 所示。文件中每行开头的关键词是每条记录的 \code{ID}，每行后面所有的出现位置对应表中的 \code{segment:URLs} 字段。
+
     \subsection{PageRank模块}\label{subsec:pagerank}
+
+    PageRank 模块的目的是计算每个页面的 PageRank 值，使用 Hadoop MapReduce 进行并行计算。开始时，程序会执行一次 MapReduce 任务来构建网页间链接关系的有向图，然后执行多次 MapReduce 任务迭代地更新计算每个页面的 PageRank 值。
+
+    \subsubsection{MapReduce 设计 —— 构建链接图}\label{subsubsec:pagerank_build}
+
+    图\ref{fig:pagerank_build-graph} 展示了构建链接图的 MapReduce 过程。输入数据和中文分词 MapReduce 任务的一样，都是 \code{RAW} 数据。
+
+    在 Map 过程中，还是以第一行数据为例，输入的 \code{key} 是偏移量，我们同样不需要，输入的 \code{value} 是一行即一个网页的数据，从中解析出 URL 为 “www.1.com” 和 nextURLs 为 “www.2.com www.3.com”。遍历 nextURLs 中的每个 nextURL，每次输出一个形如 \code{<url,nextURL>} 的键值对，这里我们输出两个键值对 \code{<www.1.com,www.2.com>} 和 \code{<www.1.com,www.3.com>}。
+
+    在 Reduce 过程中，输入的 \code{key} 是 URL，原样输出，而输入的 \code{value} 是一个 nextURL 的迭代器，我们将迭代器中的所有字符串用空格拼接起来后，再前面加上每个页面的 PageRank 初始值 “1.00” 后输出。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/pagerank_build-graph}
+        \caption{构建链接图 MapReduce 过程示意图}
+        \label{fig:pagerank_build-graph}
+    \end{figure}
+
+    \subsubsection{MapReduce 设计 —— 计算 PageRank 值}\label{subsubsec:pagerank_calc}
+
+    图\ref{fig:pagerank_calculate} 展示了计算 PageRank 值的 MapReduce 过程。该 MapReduce 过程会迭代执行多次，每次任务的输入数据是上次任务的输出数据，第一次任务的输入数据是构建链接图 MapReduce 任务的输出数据。
+
+    在 Map 过程中，以构建链接图 MapReduce 任务输出数据的第一行为例，输入的 \code{key} 是偏移量，同样不需要，输入的 \code{value} 是 www.1.com 的链路信息 “www.1.com 1.00 www.2.com www.3.com”，从中解析出当前 URL 为 “www.1.com”，PageRank 值为 “1.00”，nextURLs 为 “www.2.com www.3.com”。
+
+    我们既要更新 PageRank 值，又要保持链路结构。我们规定，当输出 \code{value} 的第一个字符为 “G” 时，表示链路结构，第一个字符为 “R” 时，表示 PageRank 值。因此，该 Mapper 函数会输出一个 \code{<www.1.com,Gwww.2.com www.3.com>} 的键值对来保持链路结构，输出两个 \code{<www.2.com,R0.50>} 和 \code{<www.3.com,R0.50>} 的键值对，表示 www.1.com 将其 PageRank 值平分给它的两个链出页面 www.2.com 和 www.3.com，这样，www.2.com 和 www.3.com 各获得 0.50 的 PageRank 值。
+
+    在 Reduce 过程中，输入的 \code{key} 是 URL，输入的 \code{value} 中，既包含以 “G” 开头的链路结构，又包含以 “R” 开头的 PageRank 值。Mapper 函数将所有的 PageRank 值累加起来，再加上随机浏览的阻尼系数，得到最终的 PageRank 值\cite{wikipedia-pagerank}。
+
+    形式化地，设当前页面为 $A$，阻尼系数为 $d$，函数 $PR(\cdot)$ 返回页面的 PageRank 值。集合 $W$ 是从页面 $A$ 链出的所有页面集合，则页面 $A$ 的 PageRank 值 $PR(A)$ 的更新公式为
+
+    $$ PR(A) = (1-d) + d \cdot \sum_{w \in W} PR(w) $$
+
+    对于处理 www.1.com 的 Reducer 函数，所有键值对的 PageRank 值之和为 1.00，这是 www.2.com 将自己的 PageRank 值 全部给了 www.1.com。设阻尼系数 $d=0.85$，则页面 $A$ 的 PageRank 值 $PR(A)$ 更新为
+
+    $$ PR(A) = (1-0.85) + 0.85 \times 1.00 = 1.00 $$
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/pagerank_calculate}
+        \caption{计算 PageRank 值 MapReduce 过程示意图}
+        \label{fig:pagerank_calculate}
+    \end{figure}
+
+    \subsubsection{PageRank 数据}\label{subsubsec:pagerank}
+
+    真实的 PageRank 数据中，链出页面过于庞大，不好演示。因此，我们使用样例数据演示 PageRank 模块在各个阶段的输出数据。
+
+    对于样例数据：
+
+    \begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+[0]    [URL] www.1.com    [nextURLs] www.2.com www.3.com [title] title-1    [body] body-1
+[1]    [URL] www.2.com    [nextURLs] www.1.com           [title] title-2    [body] body-2
+[2]    [URL] www.3.com    [nextURLs]                     [title] title-3    [body] body-3
+    \end{lstlisting}
+
+    经过构建链接图的 MapReduce 任务后，输出数据：
+
+    \begin{lstlisting}
+www.1.com	1.00	www.2.com	www.3.com
+www.2.com	1.00	www.1.com
+www.3.com	1.00
+    \end{lstlisting}
+
+    经过 1 次计算 PageRank 值的 MapReduce 任务后，输出数据：
+
+    \begin{lstlisting}
+www.1.com	1.000000	www.2.com	www.3.com
+www.2.com	0.575000	www.1.com
+www.3.com	0.575000
+    \end{lstlisting}
+
+    经过 2 次计算 PageRank 值的 MapReduce 任务后，输出数据：
+
+    \begin{lstlisting}
+www.1.com	0.638750	www.2.com	www.3.com
+www.2.com	0.575000	www.1.com
+www.3.com	0.575000
+    \end{lstlisting}
+
+    经过若干次计算 PageRank 值的 MapReduce 任务后，输出数据最终稳定在：
+
+    \begin{lstlisting}
+www.1.com	0.437921	www.2.com	www.3.com
+www.2.com	0.338731	www.1.com
+www.3.com	0.338731
+    \end{lstlisting}
+
+    \subsubsection{迁移到 HBase}\label{subsubsec:pagerank_migrate}
+
+    最后，我们将最后一次输出文件中的数据迁移到 HBase 的 \code{NNU\_PAGES} 表的 \code{pagerank} 族中，\code{NNU\_PAGES} 表的结构如表\ref{tab:archicture_nnu-pages} 所示。文件中每行开头的 URL 是每条记录的 \code{ID}，每行后面的 PageRank 值对应表中的 \code{pagerank:value} 字段。
 
     \subsection{检索模块}\label{subsec:retrieve}
 
+    检索模块的目的是根据检索关键字返回搜索结果。由于服务器是使用 Python 语言搭建的，因此该模块的代码都是基于 Python 的。我们使用 HappyBase 库\cite{docs-happybase}与 HBase进行数据通信，使用 Django 库\cite{docs-django}搭建 Web 服务器的框架。
+
+    \subsubsection{连接 HBase 数据库}\label{subsubsec:retrieve_connect}
+
+    HappyBase 库是 Python 语言中和 HBase 建立数据通信的库之一，使用起来非常方便。使用表\ref{tab:archicture_nnu-pages} 作为样例数据，如下是一段实现查询 www.1.com 和 www.2.com 网页信息的示例代码：
+
+    \begin{lstlisting}[language=Python]
+import happybase
+connection = happybase.Connection(host="192.168.0.20", port=9090)
+table = connection.table('NNU_PAGES')
+urls = ["www.1.com", "www.2.com"]
+rows = table.rows(urls)
+connection.close()
+print(rows)
+
+# {
+#     b'www.1.com': {
+#         b'crawl:title': b'title-1',
+#         b'crawl:body': b'body-1',
+#         b'crawl:nextURLs': b'www.2.com www.3.com',
+#         b'pagerank:value': b'1.64',
+#     },
+#     b'www.2.com': {
+#         b'crawl:title': b'title-2',
+#         b'crawl:body': b'body-2',
+#         b'crawl:nextURLs': b'www.1.com',
+#         b'pagerank:value': b'0.88',
+#     },
+# }
+    \end{lstlisting}
+
+    返回值保存在变量 \code{rows} 中，这是一个字典对象，\code{key} 是每条记录的 \code{ID}，即每个网页的 URL，\code{value} 还是一个字典对象，其 \code{key} 是每个字段的名称，\code{value} 是记录在该字段的值。因为 HBase 是将文本内容序列化后存储的，因此所有的 \code{key} 和 \code{value} 都是 Python 字节序列。
+
+    \subsubsection{检索过程}\label{subsubsec:retrieve_run}
+
+    检索过程如图\ref{fig:retrieve} 所示。对于输入的查询关键词，需要先对其进行分词操作，因为查询关键词可能由多个基础词语复合而成。例如，对于查询关键词 “南京师范大学计算机学院”，倒排索引表 \code{NNU\_WORDS} 中肯定不存在，因此我们需要将其切分为 “南京”、“师范”、“大学”、“计算机”、“学院” 这样的关键词序列（这只是一个示例切法，当然还存在其它的切分方法），对每个关键词分别检索，最后再汇总搜索结果。
+
+    对于每个关键词，我们按如下步骤进行检索：
+
+    \begin{enumerate}
+        \item 在倒排索引表 \code{NNU\_WORDS} 中搜索该关键词；
+        \item 若搜索结果为空，返回空集，程序结束；
+        \item 提取出所有含有该关键词的 URL 列表；
+        \item 在网页信息表 \code{NNU\_PAGES} 中搜索 URL 列表，得到每个网页的信息；
+        \item 返回网页信息列表；
+    \end{enumerate}
+
+    在获得了每个关键词对应的网页信息列表后，我们按如下步骤计算搜索结果：
+
+    \begin{enumerate}
+        \item 将每个关键词的网页信息列表汇总在一起；
+        \item 根据网页得分（综合考虑网页的 PageRank 值、关键词在标题中出现的次数、关键词在正文中出现的次数）对网页降序排序；
+        \item 返回前 100 个网页作为搜索结果；
+    \end{enumerate}
+
+    注意，在第 2 步中，网页得分需要综合考虑网页的质量和网页的相关性，而 PageRank 值反映了网页的质量，关键词在标题和正文中出现的次数反映了网页的相关性。更进一步，我们认为关键词在标题中出现一次，其相关性大于在正文中出现一次，即标题的权重肯定要大于正文的权重，这也是我们在构建关键词出现位置时，使用 “@@” 和 “@” 区分标题和正文的原因所在。
+
+    形式化地，设一个网页 $A$ 的 PageRank 值为 $PR(A)$，网页得分为 $SC(A)$，关键词在标题中出现的次数为 $N_T(A)$，出现一次得 $S_T$ 分，关键词在正文中出现的次数为 $N_B(A)$，出现一次得 $S_B$ 分。则网页得分为 $SC(A)$ 的计算公式为
+
+    $$ SC(A) = PR(A) + S_T \cdot N_T(A) + S_B \cdot N_B(A) $$
+
+    在计算过程中，我们取 $S_T=0.5$，$S_B=0.1$。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/retrieve}
+        \caption{检索过程示意图}
+        \label{fig:retrieve}
+    \end{figure}
+
+    \subsubsection{搭建服务器}\label{subsubsec:retrieve_server}
+
+    我们使用 Python 的 Django 库搭建 Web 服务器的后端框架，使用 Vue 搭建前端框架。Web 守护进程运行在 1 号服务器上。
+
+    由于 1 号服务器是实验室中的服务器，因此没有公网 IP。接下来，我们将 Web 服务器挂载到阿里云服务器上，该阿里云服务器具有公网 IP 并绑定了域名。我们使用 frp 组件\cite{github-frp} 开启 DDNS 功能，将 Web 服务器绑定到阿里云服务器的一个端口上。最后使用 nginx 配置反向代理，将用户在 80 端口上的访问重定向至指定端口。
+
+    由于搭建服务器不是本项目的重点，因此我们一笔带过，仅进行简要说明。
+
 
     \section{项目演示}\label{sec:demo}
-    1
+
+    本项目的开源地址是 https://github.com/enderman19980125/TinySearchEngine/。
+
+    本项目的演示地址是 http://www.conybrown.cn/apps/retrieve-njnu/。
+
+    图\ref{fig:demo} 展示了在搜索引擎中输入 “计算机” 作为查询关键词所返回的前三条搜索结果。我们可以看到，搜索结果的质量还是比较好的。
+
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=\textwidth]{src/demo}
+        \caption{查询关键词 “计算机” 返回的部分搜索结果}
+        \label{fig:demo}
+    \end{figure}
 
 
     \section{遇到的困难}\label{sec:difficulty}
-
-    2\cite{pascal} 123312\cite{search-engine}
 
 
     \section{未来的改进}\label{sec:improvement}
