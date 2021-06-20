@@ -4,8 +4,39 @@
 \usepackage{xcolor}
 \usepackage{geometry}
 \usepackage{fancyhdr}
+\usepackage{lastpage}
 \usepackage{graphicx}
 \usepackage{listings}
+\usepackage{lstautogobble}
+
+\geometry{bottom=3cm}
+
+\pagestyle{fancy}
+\fancyfoot[C]{第 \thepage 页 \quad 共 \pageref{LastPage} 页}
+
+\fancypagestyle{firstpage}{
+    \fancyhead{}
+    \renewcommand{\headrulewidth}{0pt}
+    \fancyfoot{}
+}
+\fancypagestyle{abstract-cn}{
+    \fancyhead[C]{摘要}
+    \fancyhead[L,R]{}
+    \renewcommand{\headrulewidth}{1pt}
+    \fancyfoot{}
+}
+\fancypagestyle{abstract-en}{
+    \fancyhead[C]{Abstract}
+    \fancyhead[L,R]{}
+    \renewcommand{\headrulewidth}{1pt}
+    \fancyfoot{}
+}
+\fancypagestyle{table-of-contents}{
+    \fancyhead[C]{目录}
+    \fancyhead[L,R]{}
+    \renewcommand{\headrulewidth}{1pt}
+    \fancyfoot{}
+}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -33,14 +64,36 @@
 
 \newcommand{\code}[1]{\colorbox{backcolor}{\lstinline|#1|}}
 
-\title{小型搜索引擎的设计与实现}
-\author{孙振强}
-\date{2021年06月18日}
-
 \begin{document}
 
-    \maketitle
+    \thispagestyle{firstpage}
+
+    \begin{center}
+
+        \vspace*{3cm}
+
+        \begin{figure}[h]
+            \centering
+            \includegraphics[width=0.6\textwidth]{src/system-logo}
+        \end{figure}
+
+        \vspace*{1cm}
+
+        {\Huge 小型搜索引擎的设计与实现}
+
+        \vfill
+
+        \begin{tabular}{cc}
+            姓名： & 孙振强                 \\
+            学院： & 计算机与电子信息学院 / 人工智能学院 \\
+            日期： & 2021 年 06 月 20 日    \\
+        \end{tabular}
+
+    \end{center}
+
     \newpage
+
+    \thispagestyle{abstract-cn}
 
     \begin{center}
         \LARGE 摘要
@@ -66,6 +119,8 @@
 
     \newpage
 
+    \thispagestyle{abstract-en}
+
     \begin{center}
         \LARGE Abstract
     \end{center}
@@ -90,8 +145,12 @@
 
     \newpage
 
+    \thispagestyle{table-of-contents}
     \tableofcontents
+
     \newpage
+
+    \setcounter{page}{1}
 
 
     \section{综述}\label{sec:introduction}
@@ -129,7 +188,7 @@
         \label{fig:archicture}
     \end{figure}
 
-    \subsection{物理架构}\label{subsec:crawl}
+    \subsection{物理架构}\label{subsec:archicture_physics}
     本系统使用了两台学院配发的台式机作为服务器。台式机配置了 Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz 四核四线程的中央处理器，Samsung DIMM DDR4 Synchronous Unbuffered (Unregistered) 2667 MHz 容量为 4 GB 的内存，KINGSTON SV300S3 容量为 120 GB 的固态硬盘，Ubuntu 20.04.2 LTS (Focal Fossa) 的服务器操作系统（无图形化界面）。
 
     两台服务器位于自己路由器搭建的内网中，表\ref{tab:archicture} 列出了两台服务器的相关配置信息。1 号服务器是主节点，HDFS 的 \code{NameNode} JPS 和 HBase 的 \code{HMaster}、\code{ThriftServer} JPS 均部署在 1 号服务器上。
@@ -163,7 +222,7 @@
         \end{tabular}
     \end{table}
 
-    \subsection{HDFS 架构}\label{subsec:crawl}
+    \subsection{HDFS 架构}\label{subsec:archicture_hdfs}
 
     HDFS 是 Hadoop 分布式文件系统（Hadoop Distributed File System），支持对应用程序数据进行高吞吐量访问\cite{docs-hdfs}。HDFS 是 Hadoop 的一个子模块，因此我们需要在 Hadoop 中配置 HDFS。注意，以下过程建立在单节点配置正确的基础上，请先参照 Hadoop 官方文档\cite{docs-hadoop-single-node} 配置单节点环境。
 
@@ -221,7 +280,7 @@ slaker
         \label{fig:archicture_hdfs-web}
     \end{figure}
 
-    \subsection{HBase 架构}\label{subsec:crawl}
+    \subsection{HBase 架构}\label{subsec:archicture_hbase}
 
     HBase 是 Hadoop 数据库（Hadoop Database），是一个分布式的可拓展的大数据存储数据库\cite{docs-hbase}。下面，我们对 HBase 的配置过程进行简要说明。注意，以下过程省略了在 \code{hbase-env.sh} 文件中对 Java 路径的配置。
 
@@ -276,7 +335,7 @@ slaker
         \label{fig:archicture_hbase-web}
     \end{figure}
 
-    \subsection{数据架构}\label{subsec:crawl}
+    \subsection{数据架构}\label{subsec:archicture_data}
 
     系统的所有数据均存储在 HDFS 和 HBase 上。其中，非结构化数据 \code{RAW}、\code{SEGMENT}、\code{PAGERANK} 存储在 HDFS 上，结构化数据 \code{NNU_PAGES}、\code{NNU_WORDS} 存储在 HBase 上。下面对这五部分的数据进行简要说明：
 
@@ -314,7 +373,7 @@ slaker
         \end{tabular}
     \end{table}
 
-    \subsection{业务架构}\label{subsec:crawl}
+    \subsection{业务架构}\label{subsec:archicture_modules}
 
     系统包含四个功能模块，分别处理一个完整的业务逻辑。下面对这四个功能模块进行简要说明：
 
@@ -698,22 +757,23 @@ print(rows)
 
     \begin{itemize}
         \item \textbf{HDFS 一地存储，随处访问}：\code{RAW} 数据的偶数分块文件存储在 1 号服务器上，奇数分块文件存储在 2 号服务器上，但文件对所有访问该 HDFS 的连接都是可见的。若在 HDFS 中访问一个不在当前节点中的文件，则 HDFS 会通过网络将该文件从存储节点上调度过来。特别说明，这里 “一地存储” 的说法是不严谨的，因为 HDFS 支持数据冗余备份存储；
+
+        \begin{figure}[!h]
+            \centering
+            \includegraphics[width=\textwidth]{src/achievement_nnu-pages}
+            \caption{\code{NNU\_PAGES} 表的数据存储状态}
+            \label{fig:achievement_nnu-pages}
+        \end{figure}
+
+        \begin{figure}[!h]
+            \centering
+            \includegraphics[width=\textwidth]{src/achievement_nnu-words}
+            \caption{\code{NNU\_WORDS} 表的数据存储状态}
+            \label{fig:achievement_nnu-words}
+        \end{figure}
+
         \item \textbf{HBase 自动数据平衡}：在数据迁移过程中，所有的数据都是从 1 号服务器上传到 HBase 中的，但我惊奇地发现，HBase 自动做了数据平衡。如图\ref{fig:achievement_nnu-pages} 和\ref{fig:achievement_nnu-words} 所示，\code{NNU\_PAGES} 表的 1.22 GB 有 562 MB 存储在 1号服务器上，有 688 MB 存储在 2 号服务器上，\code{NNU\_WORDS} 表的 4.05 GB 有 2.35 GB 存储在 1号服务器上，有 1.70 GB 存储在 2 号服务器上；
     \end{itemize}
-
-    \begin{figure}[!h]
-        \centering
-        \includegraphics[width=\textwidth]{src/achievement_nnu-pages}
-        \caption{\code{NNU\_PAGES} 表的数据存储状态}
-        \label{fig:achievement_nnu-pages}
-    \end{figure}
-
-    \begin{figure}[!h]
-        \centering
-        \includegraphics[width=\textwidth]{src/achievement_nnu-words}
-        \caption{\code{NNU\_WORDS} 表的数据存储状态}
-        \label{fig:achievement_nnu-words}
-    \end{figure}
 
     自己对于经验和精神上的收获，总结如下：
 
@@ -723,6 +783,8 @@ print(rows)
         \item \textbf{StackOverflow 等问答网站的使用}：我们遇到的绝大多数 bug，前人都已经踩过坑了，并且告诉后人应该如何从坑里爬出来。StackOverflow 这类问答网站上涵盖了各种环境各种语言的 bug，并且有许多大牛提供了非常优质的解决方案。合理利用报错信息和问答网站，往往能起到事半功倍的效果；
         \item \textbf{坚持不懈的毅力}：自己在搭建环境和编写代码的过程中，遭遇了好几次一筹莫展无法继续下去的情况，几度想要放弃，但最终都慢慢熬下来了。身处绝境时，不妨出去散散心，换个环境放松心态，缓解一下焦虑的情绪，可能就会发现 “山重水复疑无路，柳暗花明又一村”。往往打败自己的不是困难本身，而是自己气急败坏的心态；
     \end{itemize}
+
+    \addcontentsline{toc}{section}{参考文献}
 
     \bibliographystyle{unsrt}
     \bibliography{references}

@@ -1,3 +1,5 @@
-xelatex -synctex=1 -interaction=nonstopmode tiny-search-engine.tex
-bibtex tiny-search-engine
-xelatex -synctex=1 -interaction=nonstopmode tiny-search-engine.tex
+file=tiny-search-engine
+sed "s/    \\\end{lstlisting}/\\\end{lstlisting}/g" $file.tex >t.tex
+xelatex -synctex=1 -interaction=nonstopmode t.tex
+bibtex t
+xelatex -synctex=1 -interaction=nonstopmode t.tex
